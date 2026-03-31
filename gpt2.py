@@ -1,66 +1,67 @@
 import torch
-import tiktoken
-from transformers import GPT2LMHeadModel
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 # ============================================================
-# GPT-2 文字生成
-# 架構：載入 Hugging Face 的 GPT-2 預訓練權重
-# 用 tiktoken 做 tokenization（和 GPT-2 原始實作一致）
+# Qwen2.5-7B-Instruct + 4-bit 量化
+# 繁體中文支援，8GB VRAM 可跑
 # ============================================================
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"使用裝置：{device}")
 
-# Step 1：載入 tokenizer
-enc = tiktoken.get_encoding("gpt2")
+# 4-bit 量化設定
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4"
+)
 
-# Step 2：載入 GPT-2 預訓練模型
-print("載入 GPT-2 模型...")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
-model.to(device)
+model_name = "Qwen/Qwen2.5-7B-Instruct"
+print("載入模型中（首次需下載約 14GB）...")
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    quantization_config=quantization_config,
+    device_map="auto"
+)
 model.eval()
 print("模型載入完成！")
 
 
-def generate(prompt, max_tokens=50, temperature=0.8):
-    """
-    輸入提示詞，輸出生成的文字
-    temperature 越高越有創意，越低越保守
-    """
-    # 把文字轉成 token ID
-    token_ids = enc.encode(prompt)
-    input_tensor = torch.tensor([token_ids], dtype=torch.long).to(device)
+def generate(prompt, max_tokens=200, temperature=0.7):
+    messages = [
+        {"role": "system", "content": "你是一個專門使用繁體中文回答的助手。無論任何情況，所有輸出必須使用繁體中文，嚴格禁止使用簡體中文。請用台灣習慣的用詞和語氣回答。"},
+        {"role": "user", "content": prompt}
+    ]
+
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+
+    inputs = tokenizer([text], return_tensors="pt").to(device)
 
     with torch.no_grad():
-        for _ in range(max_tokens):
-            # 跑模型，取得下一個 token 的機率分布
-            outputs = model(input_tensor)
-            logits = outputs.logits[:, -1, :]  # 只看最後一個位置
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_tokens,
+            temperature=temperature,
+            do_sample=True,
+            pad_token_id=tokenizer.eos_token_id
+        )
 
-            # 用 temperature 調整分布，再取樣
-            logits = logits / temperature
-            probs = torch.softmax(logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)
-
-            # 把新 token 接到輸入後面
-            input_tensor = torch.cat([input_tensor, next_token], dim=1)
-
-            # 遇到結束符號就停
-            if next_token.item() == enc.eot_token:
-                break
-
-    # 把 token ID 轉回文字
-    generated_ids = input_tensor[0].tolist()
-    return enc.decode(generated_ids)
+    generated = outputs[0][inputs.input_ids.shape[1]:]
+    return tokenizer.decode(generated, skip_special_tokens=True)
 
 
-# ============================================================
 if __name__ == "__main__":
-    prompt = "The future of AI is"
+    prompt = "人工智慧的未來是什麼？"
     print(f"\n提示詞：{prompt}")
     print("生成中...\n")
-
-    result = generate(prompt, max_tokens=100, temperature=0.8)
+    result = generate(prompt, max_tokens=200)
     print("=" * 50)
     print(result)
     print("=" * 50)

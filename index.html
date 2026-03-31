@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPT-2 Web Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 8px;
+      color: #ffffff;
+    }
+
+    p.subtitle {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 32px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-size: 1rem;
+      resize: vertical;
+      min-height: 80px;
+      outline: none;
+      transition: border 0.2s;
+    }
+
+    textarea:focus { border-color: #555; }
+
+    .controls {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .slider-group label {
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    input[type="range"] { width: 100%; accent-color: #7c6af7; }
+
+    button {
+      padding: 12px 28px;
+      border-radius: 10px;
+      border: none;
+      background: #7c6af7;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    button:hover { background: #6a59e0; }
+    button:disabled { background: #444; cursor: not-allowed; }
+
+    .output-box {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px;
+      min-height: 120px;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      color: #ccc;
+    }
+
+    .status {
+      font-size: 0.8rem;
+      color: #888;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <h1>🤖 GPT-2 Web Demo</h1>
+  <p class="subtitle">手刻 Transformer + GPT-2 預訓練權重｜自主學習專案成果</p>
+
+  <div class="container">
+    <textarea id="prompt" placeholder="輸入提示詞，例如：The future of AI is"></textarea>
+
+    <div class="controls">
+      <div class="slider-group">
+        <label>字數上限：<span id="max-tokens-val">100</span></label>
+        <input type="range" id="max-tokens" min="20" max="300" value="100"
+          oninput="document.getElementById('max-tokens-val').textContent=this.value">
+      </div>
+      <div class="slider-group">
+        <label>Temperature：<span id="temp-val">0.8</span></label>
+        <input type="range" id="temperature" min="0.1" max="1.5" step="0.1" value="0.8"
+          oninput="document.getElementById('temp-val').textContent=parseFloat(this.value).toFixed(1)">
+      </div>
+      <button id="btn" onclick="generate()">生成</button>
+    </div>
+
+    <div class="output-box" id="output">輸出結果會顯示在這裡...</div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <script>
+    async function generate() {
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) { alert('請輸入提示詞'); return; }
+
+      const btn = document.getElementById('btn');
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+
+      btn.disabled = true;
+      btn.textContent = '生成中...';
+      output.textContent = '⏳ 生成中，請稍候...';
+      status.textContent = '';
+
+      const start = Date.now();
+
+      try {
+        const res = await fetch('http://localhost:5000/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            max_tokens: parseInt(document.getElementById('max-tokens').value),
+            temperature: parseFloat(document.getElementById('temperature').value)
+          })
+        });
+
+        const data = await res.json();
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+
+        output.textContent = data.result || data.error;
+        status.textContent = `生成完成｜耗時 ${elapsed} 秒`;
+      } catch (e) {
+        output.textContent = '❌ 無法連接後端，請確認 app.py 正在執行';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '生成';
+      }
+    }
+
+    // 按 Ctrl+Enter 送出
+    document.getElementById('prompt').addEventListener('keydown', e => {
+      if (e.ctrlKey && e.key === 'Enter') generate();
+    });
+  </script>
+</body>
+</html>
