@@ -1,0 +1,532 @@
+[
+  {
+    "id": 2387,
+    "name": "給你好看",
+    "clip": "video/w/wait_and_see"
+  },
+  {
+    "id": 2196,
+    "name": "謝謝_A",
+    "clip": "video/t/thank_n"
+  },
+  {
+    "id": 2197,
+    "name": "謝謝_B",
+    "clip": "video/t/thank_s"
+  },
+  {
+    "id": 902,
+    "name": "再見",
+    "clip": "video/g/good_bye"
+  },
+  {
+    "id": 1454,
+    "name": "不是_A",
+    "clip": "video/n/not_be_a"
+  },
+  {
+    "id": 1453,
+    "name": "不是_B",
+    "clip": "video/n/not_be"
+  },
+  {
+    "id": 3006,
+    "name": "不是我_A",
+    "clip": "video/n/not_me_a"
+  },
+  {
+    "id": 3007,
+    "name": "不是我_B",
+    "clip": "video/n/not_me_b"
+  },
+  {
+    "id": 268,
+    "name": "可是",
+    "clip": "video/b/but"
+  },
+  {
+    "id": 2095,
+    "name": "來得及",
+    "clip": "video/s/sufficient_a"
+  },
+  {
+    "id": 1497,
+    "name": "就是嘛",
+    "clip": "video/o/of_course"
+  },
+  {
+    "id": 3000,
+    "name": "康是美",
+    "clip": "video/c/cosmed"
+  },
+  {
+    "id": 163,
+    "name": "是",
+    "clip": "video/b/be"
+  },
+  {
+    "id": 67,
+    "name": "老是",
+    "clip": "video/a/always"
+  },
+  {
+    "id": 1060,
+    "name": "若是",
+    "clip": "video/i/if"
+  },
+  {
+    "id": 1115,
+    "name": "都是我不好_A",
+    "clip": "video/i/its_all_my_fault_a"
+  },
+  {
+    "id": 1116,
+    "name": "都是我不好_B",
+    "clip": "video/i/its_all_my_fault_b"
+  },
+  {
+    "id": 961,
+    "name": "害我",
+    "clip": "video/h/harm_me"
+  },
+  {
+    "id": 1384,
+    "name": "屬於我",
+    "clip": "video/m/my"
+  },
+  {
+    "id": 1049,
+    "name": "我_A",
+    "clip": "video/i/i_a"
+  },
+  {
+    "id": 1050,
+    "name": "我_B",
+    "clip": "video/i/i_b"
+  },
+  {
+    "id": 2200,
+    "name": "我們兩個",
+    "clip": "video/t/the_two_of_us"
+  },
+  {
+    "id": 2416,
+    "name": "我們",
+    "clip": "video/w/we"
+  },
+  {
+    "id": 3008,
+    "name": "我沒有_A",
+    "clip": "video/i/i_do_not_have_a"
+  },
+  {
+    "id": 3009,
+    "name": "我沒有_B",
+    "clip": "video/i/i_do_not_have_b"
+  },
+  {
+    "id": 526,
+    "name": "騙我",
+    "clip": "video/d/deceived"
+  },
+  {
+    "id": 1436,
+    "name": "不關你的事",
+    "clip": "video/n/none_of_your_business"
+  },
+  {
+    "id": 2499,
+    "name": "你",
+    "clip": "video/y/you"
+  },
+  {
+    "id": 2201,
+    "name": "你們兩個",
+    "clip": "video/t/the_two_of_you"
+  },
+  {
+    "id": 2500,
+    "name": "你們",
+    "clip": "video/y/you_plural"
+  },
+  {
+    "id": 2504,
+    "name": "屬於你",
+    "clip": "video/y/your"
+  },
+  {
+    "id": 972,
+    "name": "他_A",
+    "clip": "video/h/he_she"
+  },
+  {
+    "id": 971,
+    "name": "他_B",
+    "clip": "video/h/he_a"
+  },
+  {
+    "id": 2199,
+    "name": "他們兩個",
+    "clip": "video/t/the_two_of_them"
+  },
+  {
+    "id": 2211,
+    "name": "他們",
+    "clip": "video/t/they"
+  },
+  {
+    "id": 1557,
+    "name": "其他",
+    "clip": "video/o/out"
+  },
+  {
+    "id": 1907,
+    "name": "卸責給他",
+    "clip": "video/s/shift_responsibility_to_him"
+  },
+  {
+    "id": 2890,
+    "name": "彈吉他",
+    "clip": "video/p/play_a_guitar"
+  },
+  {
+    "id": 996,
+    "name": "屬於他",
+    "clip": "video/h/his_or_her"
+  },
+  {
+    "id": 595,
+    "name": "不喜歡_N",
+    "clip": "video/d/dont_like_n"
+  },
+  {
+    "id": 596,
+    "name": "不喜歡_S",
+    "clip": "video/d/dont_like_s"
+  },
+  {
+    "id": 1208,
+    "name": "喜歡_N",
+    "clip": "video/l/like_n"
+  },
+  {
+    "id": 1209,
+    "name": "喜歡_S",
+    "clip": "video/l/like_s"
+  },
+  {
+    "id": 1470,
+    "name": "難吃",
+    "clip": "video/n/not_taste_b"
+  },
+  {
+    "id": 516,
+    "name": "不敢吃",
+    "clip": "video/d/dare_not_to_eat"
+  },
+  {
+    "id": 648,
+    "name": "吃",
+    "clip": "video/e/eat"
+  },
+  {
+    "id": 168,
+    "name": "吃不消_A",
+    "clip": "video/b/be_unable_to_stand_or_bear_a"
+  },
+  {
+    "id": 169,
+    "name": "吃不消_B",
+    "clip": "video/b/be_unable_to_stand_or_bear_b"
+  },
+  {
+    "id": 170,
+    "name": "吃不消_C",
+    "clip": "video/b/be_unable_to_stand_or_bear_c"
+  },
+  {
+    "id": 60,
+    "name": "吃光",
+    "clip": "video/a/all_gone_b"
+  },
+  {
+    "id": 2992,
+    "name": "吃藥",
+    "clip": "video/t/take_medicine"
+  },
+  {
+    "id": 2094,
+    "name": "划不來",
+    "clip": "video/s/suffer_losses_b"
+  },
+  {
+    "id": 649,
+    "name": "吃飯_A",
+    "clip": "video/e/eat_rice"
+  },
+  {
+    "id": 965,
+    "name": "吃飯_B",
+    "clip": "video/h/have_a_meal"
+  },
+  {
+    "id": 853,
+    "name": "吃飽了",
+    "clip": "video/f/full_b"
+  },
+  {
+    "id": 2047,
+    "name": "吃驚",
+    "clip": "video/s/startle_a"
+  },
+  {
+    "id": 1442,
+    "name": "吃麵",
+    "clip": "video/n/noodles"
+  },
+  {
+    "id": 537,
+    "name": "好吃_A",
+    "clip": "video/d/delicious_b"
+  },
+  {
+    "id": 536,
+    "name": "好吃_B",
+    "clip": "video/d/delicious_a"
+  },
+  {
+    "id": 1477,
+    "name": "沒有什麼(看、吃、讀)_A",
+    "clip": "video/n/nothing_watch_eat_read_d"
+  },
+  {
+    "id": 1476,
+    "name": "沒有什麼(看、吃、讀)_B",
+    "clip": "video/n/nothing_watch_eat_read_b"
+  },
+  {
+    "id": 1426,
+    "name": "沒有什麼(看、吃、讀)_C",
+    "clip": "video/n/no_big_deal_e"
+  },
+  {
+    "id": 616,
+    "name": "喝",
+    "clip": "video/d/drink"
+  },
+  {
+    "id": 2554,
+    "name": "人拿過去",
+    "clip": "video/a/a_man_was_out"
+  },
+  {
+    "id": 886,
+    "name": "去_A",
+    "clip": "video/g/go_a"
+  },
+  {
+    "id": 887,
+    "name": "去_B",
+    "clip": "video/g/go_b"
+  },
+  {
+    "id": 1177,
+    "name": "去年",
+    "clip": "video/l/last_year"
+  },
+  {
+    "id": 798,
+    "name": "去掉",
+    "clip": "video/f/fired_b"
+  },
+  {
+    "id": 1586,
+    "name": "過去",
+    "clip": "video/p/past"
+  },
+  {
+    "id": 1748,
+    "name": "過去的最近",
+    "clip": "video/r/recent_past"
+  },
+  {
+    "id": 826,
+    "name": "陪去",
+    "clip": "video/f/follow"
+  },
+  {
+    "id": 430,
+    "name": "來",
+    "clip": "video/c/come"
+  },
+  {
+    "id": 1461,
+    "name": "來不及",
+    "clip": "video/n/not_enough_time"
+  },
+  {
+    "id": 1554,
+    "name": "來源",
+    "clip": "video/o/origin"
+  },
+  {
+    "id": 1555,
+    "name": "本來",
+    "clip": "video/o/originally"
+  },
+  {
+    "id": 855,
+    "name": "未來_A",
+    "clip": "video/f/future_a"
+  },
+  {
+    "id": 856,
+    "name": "未來_B",
+    "clip": "video/f/future_b"
+  },
+  {
+    "id": 1396,
+    "name": "將來的最近",
+    "clip": "video/n/near_future"
+  },
+  {
+    "id": 1406,
+    "name": "從來沒有_A",
+    "clip": "video/n/never_before_a"
+  },
+  {
+    "id": 1407,
+    "name": "從來沒有_B",
+    "clip": "video/n/never_before_b"
+  },
+  {
+    "id": 2315,
+    "name": "想不起來_A",
+    "clip": "video/u/unable_to_recall"
+  },
+  {
+    "id": 299,
+    "name": "想不起來_B",
+    "clip": "video/c/cannot_remember"
+  },
+  {
+    "id": 789,
+    "name": "想出來",
+    "clip": "video/f/figure_out"
+  },
+  {
+    "id": 2043,
+    "name": "站起來",
+    "clip": "video/s/stand_up"
+  },
+  {
+    "id": 1081,
+    "name": "越來越多",
+    "clip": "video/i/increase"
+  },
+  {
+    "id": 527,
+    "name": "越來越少",
+    "clip": "video/d/decrease"
+  },
+  {
+    "id": 1266,
+    "name": "馬來西亞",
+    "clip": "video/m/malaysia"
+  },
+  {
+    "id": 2705,
+    "name": "OK (店家)",
+    "clip": "video/o/ok_mart"
+  },
+  {
+    "id": 2704,
+    "name": "全家 (店家)",
+    "clip": "video/f/family_mart"
+  },
+  {
+    "id": 890,
+    "name": "回家_A",
+    "clip": "video/g/go_home_a"
+  },
+  {
+    "id": 891,
+    "name": "回家_B",
+    "clip": "video/g/go_home_b"
+  },
+  {
+    "id": 478,
+    "name": "國家",
+    "clip": "video/c/country"
+  },
+  {
+    "id": 1059,
+    "name": "閒賦在家",
+    "clip": "video/i/idle_at_home"
+  },
+  {
+    "id": 2909,
+    "name": "大家",
+    "clip": "video/e/everyone"
+  },
+  {
+    "id": 1018,
+    "name": "家_A",
+    "clip": "video/h/house_a"
+  },
+  {
+    "id": 1019,
+    "name": "家_B",
+    "clip": "video/h/house_b"
+  },
+  {
+    "id": 3495,
+    "name": "家人",
+    "clip": "video/f/family_member"
+  },
+  {
+    "id": 751,
+    "name": "家庭",
+    "clip": "video/f/family"
+  },
+  {
+    "id": 3252,
+    "name": "家庭主婦_A",
+    "clip": "video/h/housewife_a"
+  },
+  {
+    "id": 3253,
+    "name": "家庭主婦_B",
+    "clip": "video/h/housewife_b"
+  },
+  {
+    "id": 3259,
+    "name": "家庭作業",
+    "clip": "video/h/homework(school_work)"
+  },
+  {
+    "id": 3498,
+    "name": "家庭活動",
+    "clip": "video/f/family_activity"
+  },
+  {
+    "id": 977,
+    "name": "家長",
+    "clip": "video/h/head_of_family"
+  },
+  {
+    "id": 3211,
+    "name": "家電",
+    "clip": "video/a/appliance"
+  },
+  {
+    "id": 1374,
+    "name": "搬家_A",
+    "clip": "video/m/moving_to_a_different_house_a"
+  },
+  {
+    "id": 1375,
+    "name": "搬家_B",
+    "clip": "video/m/moving_to_a_different_house_b"
+  }
+]
