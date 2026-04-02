@@ -43,6 +43,7 @@ print("攝影機已開啟，按 Q 退出")
 
 while cap.isOpened():
     ret, frame = cap.read()
+    frame = cv2.flip(frame, 1)
     if not ret:
         break
 

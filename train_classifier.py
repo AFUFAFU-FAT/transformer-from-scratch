@@ -48,7 +48,9 @@ clf = MLPClassifier(
     verbose=True,
     early_stopping=True,
     validation_fraction=0.1,
-    n_iter_no_change=10
+    n_iter_no_change=10,
+    alpha=0.01,          # 加強 L2 正則化（原本預設是 0.0001）
+    learning_rate='adaptive',  # 自適應學習率
 )
 
 clf.fit(X_train, y_train)
@@ -72,3 +74,16 @@ print("\n模型已儲存到 models/")
 print(f"  classifier.pkl")
 print(f"  label_encoder.pkl")
 print(f"  scaler.pkl")
+
+# 確認過擬合：比較訓練集和測試集的準確率
+train_acc = accuracy_score(y_train, clf.predict(X_train))
+test_acc = accuracy_score(y_test, clf.predict(X_test))
+
+print(f"\n訓練集準確率：{train_acc:.4f} ({train_acc*100:.2f}%)")
+print(f"測試集準確率：{test_acc:.4f} ({test_acc*100:.2f}%)")
+print(f"差距：{(train_acc - test_acc)*100:.2f}%")
+
+if train_acc - test_acc > 0.1:
+    print("⚠️  可能有過擬合！訓練集和測試集差距超過 10%")
+else:
+    print("✅ 過擬合程度可接受")
