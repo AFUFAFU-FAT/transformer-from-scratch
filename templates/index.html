@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台灣手語辨識</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin: 12px 0 16px;
+      color: #a0b4ff;
+    }
+
+    .main-layout {
+      display: flex;
+      gap: 16px;
+      width: 100%;
+      max-width: 960px;
+      align-items: flex-start;
+    }
+
+    /* ── Camera ── */
+    .camera-col {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #video-wrap {
+      position: relative;
+      width: 480px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #111;
+      box-shadow: 0 0 0 2px #2a2a4a;
+    }
+
+    #video {
+      width: 100%;
+      display: block;
+      transform: scaleX(-1); /* mirror */
+    }
+
+    #status-bar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.65);
+      font-size: 0.78rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #collecting-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 600;
+      color: #4ade80;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    #frame-bar-wrap {
+      height: 4px;
+      background: #1e1e3a;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #frame-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      transition: width 0.1s;
+    }
+
+    /* ── Right column ── */
+    .info-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: #181828;
+      border: 1px solid #2a2a4a;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .card-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #6670a0;
+      margin-bottom: 8px;
+    }
+
+    /* Top-3 predictions */
+    .pred-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 0;
+      border-bottom: 1px solid #1e1e3a;
+    }
+    .pred-row:last-child { border-bottom: none; }
+
+    .pred-rank {
+      font-size: 0.7rem;
+      width: 18px;
+      color: #556;
+    }
+
+    .pred-label {
+      flex: 1;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .pred-conf {
+      font-size: 0.85rem;
+      color: #7090ff;
+      min-width: 38px;
+      text-align: right;
+    }
+
+    .conf-bar-wrap {
+      width: 80px;
+      height: 5px;
+      background: #1e1e3a;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .conf-bar {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+
+    /* Latest word big display */
+    #latest-word {
+      font-size: 2.8rem;
+      font-weight: 700;
+      text-align: center;
+      color: #ffffff;
+      min-height: 3.5rem;
+      letter-spacing: 0.05em;
+      transition: color 0.3s;
+    }
+
+    #trigger-badge {
+      font-size: 0.7rem;
+      text-align: center;
+      color: #556;
+      margin-top: 2px;
+    }
+
+    /* Sentence / word buffer */
+    #sentence-box {
+      min-height: 2.2rem;
+      font-size: 1.2rem;
+      line-height: 1.8rem;
+      letter-spacing: 0.08em;
+      word-break: break-all;
+      color: #c0d0ff;
+    }
+
+    .word-chip {
+      display: inline-block;
+      margin: 2px 3px;
+      padding: 2px 8px;
+      background: #23235a;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+
+    .word-chip.new {
+      animation: flash 0.4s ease;
+    }
+
+    @keyframes flash {
+      0% { background: #4a4aaa; }
+      100% { background: #23235a; }
+    }
+
+    /* Buttons */
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    button {
+      flex: 1;
+      padding: 8px;
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+
+    #btn-start { background: #3b82f6; color: #fff; }
+    #btn-stop  { background: #374151; color: #9ca3af; }
+    #btn-clear { background: #1e2a3a; color: #6b7280; border: 1px solid #374151; }
+
+    /* Connection dot */
+    #conn-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      display: inline-block;
+      margin-right: 5px;
+    }
+    #conn-dot.connected { background: #4ade80; }
+
+    .conn-row {
+      display: flex;
+      align-items: center;
+      font-size: 0.75rem;
+      color: #6670a0;
+    }
+
+    /* EndPose detail rows */
+    .detail-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 0.72rem;
+      color: #556;
+      margin-top: 2px;
+    }
+    .detail-label { min-width: 36px; }
+    .detail-val { color: #7090ff; }
+
+    /* ── Vocabulary dictionary ── */
+    .vocab-section {
+      width: 100%;
+      max-width: 960px;
+      margin-top: 20px;
+    }
+
+    .vocab-section h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #6670a0;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #2a2a4a;
+    }
+
+    .vocab-groups {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .vocab-group {
+      background: #181828;
+      border: 1px solid #2a2a4a;
+      border-radius: 10px;
+      padding: 10px 14px;
+      min-width: 130px;
+    }
+
+    .vocab-group-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #4a5090;
+      margin-bottom: 8px;
+    }
+
+    .vocab-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .vocab-tag {
+      font-size: 0.9rem;
+      padding: 2px 9px;
+      background: #1e1e3a;
+      border: 1px solid #2a2a5a;
+      border-radius: 5px;
+      color: #c0d0ff;
+      cursor: default;
+      transition: background 0.15s;
+    }
+
+    .vocab-tag:hover {
+      background: #2a2a6a;
+      color: #fff;
+    }
+
+    @media (max-width: 700px) {
+      .main-layout { flex-direction: column; }
+      #video-wrap { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>台灣手語辨識系統</h1>
+
+<div class="main-layout">
+
+  <!-- Left: Camera -->
+  <div class="camera-col">
+    <div id="video-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas" style="display:none"></canvas>
+      <div id="status-bar">
+        <div id="collecting-indicator" style="visibility:hidden">
+          <div class="dot"></div> 收集中
+        </div>
+        <div style="font-size:0.75rem;color:#6670a0" id="frame-count">0 / 32 幀</div>
+      </div>
+    </div>
+    <div id="frame-bar-wrap"><div id="frame-bar"></div></div>
+
+    <div class="btn-row">
+      <button id="btn-start">開始辨識</button>
+      <button id="btn-stop">停止</button>
+      <button id="btn-clear">清除句子</button>
+    </div>
+
+    <div class="conn-row">
+      <span id="conn-dot"></span>
+      <span id="conn-text">未連線</span>
+    </div>
+  </div>
+
+  <!-- Right: Info -->
+  <div class="info-col">
+
+    <!-- Latest word -->
+    <div class="card">
+      <div class="card-title">辨識結果</div>
+      <div id="latest-word">—</div>
+      <div id="trigger-badge"></div>
+    </div>
+
+    <!-- Top3 live preview -->
+    <div class="card">
+      <div class="card-title">即時候選（Top 3）</div>
+      <div id="top3-list">
+        <div class="pred-row" style="color:#444">等待手勢...</div>
+      </div>
+      <div class="detail-row" id="detail-seq" style="display:none">
+        <span class="detail-label">序列：</span><span class="detail-val" id="v-seq">—</span>
+      </div>
+      <div class="detail-row" id="detail-end" style="display:none">
+        <span class="detail-label">結尾：</span><span class="detail-val" id="v-end">—</span>
+      </div>
+    </div>
+
+    <!-- Sentence buffer -->
+    <div class="card">
+      <div class="card-title">詞彙記錄</div>
+      <div id="sentence-box"><span style="color:#333">（詞彙會在這裡累積）</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Vocabulary Dictionary -->
+<div class="vocab-section">
+  <h2>可辨識詞彙（共 32 個）</h2>
+  <div class="vocab-groups">
+
+    <div class="vocab-group">
+      <div class="vocab-group-title">人稱</div>
+      <div class="vocab-tags">
+        <span class="vocab-tag">你</span>
+        <span class="vocab-tag">我</span>
+        <span class="vocab-tag">他</span>
+        <span class="vocab-tag">我們</span>
+        <span class="vocab-tag">人</span>
+        <span class="vocab-tag">聽人</span>
+      </div>
+    </div>
+
+    <div class="vocab-group">
+      <div class="vocab-group-title">問候 / 禮貌</div>
+      <div class="vocab-tags">
+        <span class="vocab-tag">好</span>
+        <span class="vocab-tag">謝謝</span>
+        <span class="vocab-tag">對不起</span>
+        <span class="vocab-tag">再見</span>
+        <span class="vocab-tag">開心</span>
+        <span class="vocab-tag">認真</span>
+      </div>
+    </div>
+
+    <div class="vocab-group">
+      <div class="vocab-group-title">動詞</div>
+      <div class="vocab-tags">
+        <span class="vocab-tag">喜歡</span>
+        <span class="vocab-tag">不喜歡</span>
+        <span class="vocab-tag">想</span>
+        <span class="vocab-tag">是</span>
+        <span class="vocab-tag">不是</span>
+        <span class="vocab-tag">學</span>
+        <span class="vocab-tag">找</span>
+        <span class="vocab-tag">介紹</span>
+        <span class="vocab-tag">問</span>
+        <span class="vocab-tag">說</span>
+        <span class="vocab-tag">住</span>
+      </div>
+    </div>
+
+    <div class="vocab-group">
+      <div class="vocab-group-title">家庭</div>
+      <div class="vocab-tags">
+        <span class="vocab-tag">爸爸</span>
+        <span class="vocab-tag">媽媽</span>
+        <span class="vocab-tag">家</span>
+      </div>
+    </div>
+
+    <div class="vocab-group">
+      <div class="vocab-group-title">時間 / 地點</div>
+      <div class="vocab-tags">
+        <span class="vocab-tag">現在</span>
+        <span class="vocab-tag">晚上</span>
+        <span class="vocab-tag">地方</span>
+        <span class="vocab-tag">一樣</span>
+      </div>
+    </div>
+
+    <div class="vocab-group">
+      <div class="vocab-group-title">疑問 / 其他</div>
+      <div class="vocab-tags">
+        <span class="vocab-tag">嗎</span>
+        <span class="vocab-tag">甚麼</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const socket = io();
+let sending = false;
+let sendInterval = null;
+const video  = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx    = canvas.getContext("2d");
+
+// ── Connection ──────────────────────────────────────────────
+socket.on("connect", () => {
+  document.getElementById("conn-dot").classList.add("connected");
+  document.getElementById("conn-text").textContent = "已連線";
+});
+socket.on("disconnect", () => {
+  document.getElementById("conn-dot").classList.remove("connected");
+  document.getElementById("conn-text").textContent = "已斷線";
+});
+
+// ── Camera ──────────────────────────────────────────────────
+let cameraStream = null;
+
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+    video.srcObject = cameraStream;
+  } catch (e) {
+    alert("無法開啟相機：" + e.message);
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+    video.srcObject = null;
+  }
+}
+
+// ── Send frames ─────────────────────────────────────────────
+function startSending() {
+  if (sending) return;
+  if (!cameraStream) startCamera().then(() => _beginSending());
+  else _beginSending();
+}
+
+function _beginSending() {
+  sending = true;
+  sendInterval = setInterval(() => {
+    if (!video.videoWidth) return;
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+    ctx.restore();
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    socket.emit("frame", { image: dataUrl });
+  }, 100);
+}
+
+function stopSending() {
+  sending = false;
+  clearInterval(sendInterval);
+  sendInterval = null;
+  stopCamera();
+  document.getElementById("collecting-indicator").style.visibility = "hidden";
+  document.getElementById("frame-bar").style.width = "0%";
+  document.getElementById("frame-count").textContent = "0 / 32 幀";
+}
+
+startCamera();
+
+document.getElementById("btn-start").onclick = startSending;
+document.getElementById("btn-stop").onclick  = stopSending;
+document.getElementById("btn-clear").onclick = () => {
+  socket.emit("clear");
+  document.getElementById("sentence-box").innerHTML = '<span style="color:#333">（詞彙會在這裡累積）</span>';
+  document.getElementById("latest-word").textContent = "—";
+  document.getElementById("trigger-badge").textContent = "";
+};
+
+// ── Preview event ────────────────────────────────────────────
+socket.on("preview", (data) => {
+  const indicator = document.getElementById("collecting-indicator");
+  indicator.style.visibility = data.collecting ? "visible" : "hidden";
+
+  const frames  = data.frames || 0;
+  const seqLen  = data.seq_len || 32;
+  const pct     = Math.min(100, Math.round(frames / seqLen * 100));
+  document.getElementById("frame-bar").style.width = pct + "%";
+  document.getElementById("frame-count").textContent = `${frames} / ${seqLen} 幀`;
+
+  if (data.top3 && data.top3.length) {
+    renderTop3(data.top3, "top3-list");
+  }
+});
+
+// ── Result event ─────────────────────────────────────────────
+socket.on("result", (data) => {
+  const wordEl = document.getElementById("latest-word");
+  wordEl.textContent = data.word || "—";
+  wordEl.style.color = data.conf >= 75 ? "#4ade80" : data.conf >= 50 ? "#facc15" : "#f87171";
+
+  const triggerMap = {
+    "early":        "⚡ 早期觸發",
+    "stop+endpose": "🛑 停止 + 結尾姿態",
+    "full":         "✅ 滿幀觸發",
+  };
+  document.getElementById("trigger-badge").textContent =
+    (triggerMap[data.trigger] || data.trigger) + `  ${data.conf}%`;
+
+  // Detail seq/end rows
+  if (data.seq_top3 && data.seq_top3.length) {
+    document.getElementById("detail-seq").style.display = "flex";
+    document.getElementById("v-seq").textContent = data.seq_top3.map(x => `${x[0]} ${x[1]}%`).join("  ");
+  } else {
+    document.getElementById("detail-seq").style.display = "none";
+  }
+  if (data.end_top3 && data.end_top3.length) {
+    document.getElementById("detail-end").style.display = "flex";
+    document.getElementById("v-end").textContent = data.end_top3.map(x => `${x[0]} ${x[1]}%`).join("  ");
+  } else {
+    document.getElementById("detail-end").style.display = "none";
+  }
+
+  if (data.top3 && data.top3.length) {
+    renderTop3(data.top3, "top3-list");
+  }
+});
+
+// ── Words event ──────────────────────────────────────────────
+socket.on("words", (data) => {
+  const box = document.getElementById("sentence-box");
+  if (!data.words || data.words.length === 0) {
+    box.innerHTML = '<span style="color:#333">（詞彙會在這裡累積）</span>';
+    return;
+  }
+  box.innerHTML = data.words.map((w, i) => {
+    const isNew = i === data.words.length - 1;
+    return `<span class="word-chip${isNew ? " new" : ""}">${w}</span>`;
+  }).join("");
+});
+
+// ── Render top3 helper ────────────────────────────────────────
+function renderTop3(top3, containerId) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = top3.map((item, idx) => {
+    const [label, conf] = item;
+    const colors = ["#ffffff", "#a0b4ff", "#5566aa"];
+    return `
+      <div class="pred-row">
+        <span class="pred-rank">${idx + 1}</span>
+        <span class="pred-label" style="color:${colors[idx]}">${label}</span>
+        <div class="conf-bar-wrap"><div class="conf-bar" style="width:${conf}%"></div></div>
+        <span class="pred-conf">${conf}%</span>
+      </div>`;
+  }).join("");
+}
+</script>
+</body>
+</html>
