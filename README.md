@@ -76,16 +76,22 @@ BiLSTM + Attention Pooling
 
 ---
 
-## 開發紀錄
+## 開發過程
 
-| Day | 完成內容 |
-|-----|---------|
-| 1 | 從零手刻 Transformer（NumPy），與 PyTorch 數值比對通過 |
-| 2 | 載入 Qwen2.5-7B-Instruct（4-bit 量化），建立 Flask API |
-| 3 | MediaPipe 手部關鍵點即時偵測（Tasks API） |
-| 4 | 爬取台灣手語辭典，解析 3,495 個詞彙結構化資料 |
-| 5 | 自錄 32 詞彙訓練資料，解決 Domain Gap；BiLSTM 95.31% |
-| 6 | Flask + SocketIO 後端、前端 Web UI、ngrok 公開部署 |
+整個專案在 **3 天**內完成：
+
+- **Day 1**：閱讀 *Attention Is All You Need*，手推所有核心公式，以 NumPy 從零實作 Transformer Encoder 並與 PyTorch 數值比對驗證
+- **Day 2–3**：在 [Claude Code](https://claude.ai/code) 輔助下完成資料收集、特徵工程、模型訓練到 Web 部署的完整流程
+
+### 主要任務與耗時
+
+| 任務 | 說明 |
+|------|------|
+| 資料收集 | 設計 179 維特徵、自錄 32 詞彙訓練資料（解決 Domain Gap） |
+| 特徵工程 | 滑動窗口切分、資料增強、特徵加權設計 |
+| 模型訓練 | BiLSTM + Attention Pooling，95.31% 驗證準確率 |
+| 即時辨識 | 狀態機 + EndPose Hybrid，解決即時信心度不穩問題 |
+| Web 部署 | Flask + SocketIO 後端、瀏覽器前端、ngrok 公開連結 |
 
 ---
 
