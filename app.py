@@ -410,6 +410,6 @@ def handle_clear():
     emit("words", {"words": []})
 
 if __name__ == "__main__":
-    print("\nStarting server...")
-    print("   http://localhost:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"\nStarting server on port {port}...")
+    socketio.run(app, host="0.0.0.0", port=port, debug=False)

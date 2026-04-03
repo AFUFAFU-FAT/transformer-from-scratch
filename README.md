@@ -1,3 +1,12 @@
+---
+title: Taiwan Sign Language Recognition
+emoji: 🤟
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # 台灣手語即時辨識 AI 系統
 
 即時辨識台灣手語詞彙，透過瀏覽器攝影機擷取畫面，以 MediaPipe 提取手部與身體特徵，送入 BiLSTM 模型分類，結果即時顯示於網頁。
