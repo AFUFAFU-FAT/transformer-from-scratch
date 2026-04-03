@@ -4,6 +4,8 @@
 
 > 自主學習計畫作品：從閱讀 *Attention Is All You Need* 論文、手推 Transformer 公式，到將 Attention 機制應用於手語序列辨識模型，3 天內完成可公開使用的 AI 網站。
 
+[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-black?logo=anthropic)](https://claude.ai/code)
+
 ---
 
 ## 功能
