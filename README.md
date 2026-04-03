@@ -2,7 +2,7 @@
 
 即時辨識台灣手語詞彙，透過瀏覽器攝影機擷取畫面，以 MediaPipe 提取手部與身體特徵，送入 BiLSTM 模型分類，結果即時顯示於網頁。
 
-> 自主學習計畫作品，展示「資料收集 → 特徵工程 → 模型訓練 → 即時部署」完整 AI 開發流程。
+> 自主學習計畫作品：從閱讀 *Attention Is All You Need* 論文、手推 Transformer 公式，到將 Attention 機制應用於手語序列辨識模型，3 天內完成可公開使用的 AI 網站。
 
 ---
 
@@ -76,20 +76,36 @@ BiLSTM + Attention Pooling
 
 ---
 
+## 從 Transformer 理論到實際應用
+
+本專案的核心模型使用 **BiLSTM + Attention Pooling**。Attention Pooling 直接源自 Transformer 的 Scaled Dot-Product Attention：對序列中每個時間步計算重要性權重，加權求和得到整段手勢的代表向量，再送入分類器。
+
+Day 1 從零推導 Transformer 的目的，正是為了理解這個機制的數學本質——為什麼 Attention 能讓模型自動聚焦在手勢動作最關鍵的幾幀，而不是平均對待所有幀。
+
+```
+Transformer Attention（論文）          BiLSTM Attention Pooling（本專案）
+───────────────────────────────        ──────────────────────────────────
+Q, K, V 計算相似度權重                  對每個時間步的 hidden state 計算權重
+softmax 正規化                          softmax 正規化
+加權求和 → context vector              加權求和 → 手勢代表向量 → 分類
+```
+
+---
+
 ## 開發過程
 
 整個專案在 **3 天**內完成：
 
-- **Day 1**：閱讀 *Attention Is All You Need*，手推所有核心公式，以 NumPy 從零實作 Transformer Encoder 並與 PyTorch 數值比對驗證
-- **Day 2–3**：在 [Claude Code](https://claude.ai/code) 輔助下完成資料收集、特徵工程、模型訓練到 Web 部署的完整流程
+- **Day 1**：閱讀 *Attention Is All You Need*，手推 Scaled Dot-Product Attention、Multi-Head Attention、Positional Encoding 等所有核心公式，以 NumPy 從零實作並與 PyTorch 數值比對（最大誤差 4.44e-16）
+- **Day 2–3**：在 [Claude Code](https://claude.ai/code) 輔助下，將 Attention 機制應用於手語序列辨識，完成資料收集、特徵工程、模型訓練到 Web 部署的完整流程
 
-### 主要任務與耗時
+### 主要任務
 
 | 任務 | 說明 |
 |------|------|
 | 資料收集 | 設計 179 維特徵、自錄 32 詞彙訓練資料（解決 Domain Gap） |
 | 特徵工程 | 滑動窗口切分、資料增強、特徵加權設計 |
-| 模型訓練 | BiLSTM + Attention Pooling，95.31% 驗證準確率 |
+| 模型訓練 | BiLSTM + Attention Pooling，驗證準確率 95.31% |
 | 即時辨識 | 狀態機 + EndPose Hybrid，解決即時信心度不穩問題 |
 | Web 部署 | Flask + SocketIO 後端、瀏覽器前端、ngrok 公開連結 |
 
