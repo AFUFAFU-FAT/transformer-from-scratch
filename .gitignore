@@ -210,3 +210,9 @@ data/catalog.json
 *.task
 __pycache__/
 *.pyc
+
+# 監控 / log
+output.json
+status.sh
+recognize_error.log
+data/test_log.csv

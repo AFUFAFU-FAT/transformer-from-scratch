@@ -19,6 +19,7 @@ import urllib.request
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+import lm_selector
 
 # ────────────────────────────────────────────────────────────
 #  模型定義
@@ -53,19 +54,23 @@ LABEL_PATH  = "data/seq_label_encoder.pkl"
 HAND_MODEL  = "hand_landmarker.task"
 POSE_MODEL  = "pose_landmarker_lite.task"
 
-W_HANDSHAPE=6.0; W_FINGERTIP=4.0; W_FINGER=3.0; W_PALM_DIR=3.0
-W_POSITION=2.5;  W_ARM=2.5;       W_FACE=3.0;   W_ORIENT=2.0; W_ANCHOR=1.5
+W_HANDSHAPE=6.0; W_FINGERTIP=4.0; W_FINGER=3.0; W_PALM_DIR=3.0; W_BINARY=10.0
+W_POSITION=4.0;  W_ARM=2.5;       W_FACE=5.0;   W_ORIENT=2.0; W_ANCHOR=1.5; W_POINTING=8.0
 FINGERTIPS={4,8,12,16,20}
 TIP_IDX=[4,8,12,16,20]; MCP_IDX=[1,5,9,13,17]
+FINGER_JOINTS=[(2,3,4),(5,6,7),(9,10,11),(13,14,15),(17,18,19)]
+EXTEND_ANGLE=140.0
 
 NOSE=0; MOUTH_L=9; MOUTH_R=10; L_EAR=7; R_EAR=8
 L_SHOULDER=11; R_SHOULDER=12; L_ELBOW=13; R_ELBOW=14
 L_WRIST_POSE=15; R_WRIST_POSE=16; L_HIP=23; R_HIP=24
 
-CONF_THRESHOLD=0.5; EARLY_TRIGGER_CONF=0.75; MIN_FRAMES=12
-PREVIEW_INTERVAL=4; CONSISTENCY_REQUIRED=2
+CONF_THRESHOLD=0.40; EARLY_TRIGGER_CONF=0.75; MIN_FRAMES=12
+PREVIEW_INTERVAL=4; CONSISTENCY_REQUIRED=3
 STOP_THRESHOLD=0.01; STOP_FRAMES=5; NO_HAND_TOLERANCE=5
-SEQ_W=0.6; END_W=0.4; STABLE_BUFFER=8
+SEQ_W=0.5; END_W=0.5; STABLE_BUFFER=8
+LM_CONF_THRESHOLD=0.70; CANDIDATE_OFFSET=4; RAMP_FRAMES=10
+EARLY_ENDPOSE_CONF=0.82; EARLY_ENDPOSE_MIN_STABLE=3
 
 LABEL_ALIASES = {"現在":"現在／今天","安靜":"安靜／平安","相見":"相見／見面"}
 
@@ -78,6 +83,27 @@ def compute_finger_extensions(lm63):
     for fi,(ti,mi) in enumerate(zip(TIP_IDX,MCP_IDX)):
         scores[fi]=np.linalg.norm(lms[ti]-wrist)/(np.linalg.norm(lms[mi]-wrist)+1e-6)
     return scores
+
+def compute_pointing_dir(lm63):
+    """食指指向方向（3D 正規化向量）：normalize(tip[8] - MCP[5])"""
+    lms=lm63.reshape(21,3)
+    d=lms[8]-lms[5]; return (d/(np.linalg.norm(d)+1e-6)).astype(np.float32)
+
+def compute_finger_binary(lm63):
+    """5-dim: 1=伸出, 0=彎曲（純 PIP 關節角度）"""
+    lms=lm63.reshape(21,3)
+    binary=np.empty(5,dtype=np.float32)
+    for fi,(a,b,c) in enumerate(FINGER_JOINTS):
+        v1=lms[a]-lms[b]; v2=lms[c]-lms[b]
+        cos_a=np.dot(v1,v2)/(np.linalg.norm(v1)*np.linalg.norm(v2)+1e-6)
+        binary[fi]=1.0 if np.degrees(np.arccos(np.clip(cos_a,-1.0,1.0)))>EXTEND_ANGLE else 0.0
+    return binary
+
+def compute_pinch_dist(lm63):
+    """捏合距離：||拇指尖-食指尖|| / 掌長"""
+    lms=lm63.reshape(21,3)
+    dist=np.linalg.norm(lms[4]-lms[8])/(np.linalg.norm(lms[9]-lms[0])+1e-6)
+    return np.array([min(dist,3.0)],dtype=np.float32)
 
 def apply_feature_weights(feat):
     out=feat.copy()
@@ -93,6 +119,10 @@ def apply_feature_weights(feat):
     out[136:146]=feat[136:146]*W_ANCHOR; out[149:161]=feat[149:161]*W_ARM
     out[161:167]=feat[161:167]*W_FACE;   out[167:169]=feat[167:169]*W_ORIENT
     out[169:179]=feat[169:179]*W_HANDSHAPE
+    out[179:189]=feat[179:189]*W_BINARY       # 手指伸展二值
+    out[189:195]=feat[189:195]*W_POINTING    # 食指指向方向
+    out[195:197]=feat[195:197]*W_BINARY      # 捏合距離
+    out[197:199]=feat[197:199]*W_BINARY      # 手部偵測旗標
     return out
 
 # ────────────────────────────────────────────────────────────
@@ -155,6 +185,13 @@ def get_probs(frames_list):
     T = len(seq)
     if T != SEQ_LEN:
         seq = seq[np.linspace(0, T-1, SEQ_LEN, dtype=int)]
+    # 若尚未加 cumulative（398-dim），自動補上
+    if seq.shape[1] == 398:
+        right_start = seq[0:1, 63:66]
+        left_start  = seq[0:1, 131:134]
+        cum_r = seq[:, 63:66]   - right_start
+        cum_l = seq[:, 131:134] - left_start
+        seq = np.concatenate([seq, cum_r, cum_l], axis=1)
     x = (torch.FloatTensor(seq).unsqueeze(0).to(device) - feat_mean) / feat_std
     return torch.softmax(bilstm(x), dim=1)[0]
 
@@ -162,6 +199,45 @@ def probs_to_top3(probs):
     top3_conf, top3_idx = probs.topk(3)
     return [(LABEL_ALIASES.get(le.classes_[i.item()], le.classes_[i.item()]), round(c.item()*100))
             for i, c in zip(top3_idx, top3_conf)]
+
+def predict_frames_app(frames):
+    """回傳 (label, conf_float, top3_percent) — conf_float 用於 LM 評分比較"""
+    probs = get_probs(frames)
+    top3  = probs_to_top3(probs)
+    return top3[0][0], top3[0][1] / 100.0, top3
+
+def add_cumulative_app(frames_arr):
+    """frames_arr: (T, D) → (T, D+6)，追加右/左手腕累積位移"""
+    right_start = frames_arr[0:1, 63:66]
+    left_start  = frames_arr[0:1, 131:134]
+    cum_r = frames_arr[:, 63:66]   - right_start
+    cum_l = frames_arr[:, 131:134] - left_start
+    return np.concatenate([frames_arr, cum_r, cum_l], axis=1)
+
+def generate_candidates_app(frames):
+    """產生 A/B/C 候選切法，所有候選先丟棄前 RAMP_FRAMES 過渡幀"""
+    candidates = []
+    frames = frames[RAMP_FRAMES:] if len(frames) > RAMP_FRAMES + MIN_FRAMES else frames
+    frames = add_cumulative_app(np.array(frames))
+    n = len(frames)
+    for key, slc in [
+        ("A", frames),
+        ("B", frames[:n - CANDIDATE_OFFSET] if n - CANDIDATE_OFFSET >= MIN_FRAMES else None),
+        ("C", frames[CANDIDATE_OFFSET:]      if n - CANDIDATE_OFFSET >= MIN_FRAMES else None),
+    ]:
+        if slc is None: continue
+        lbl, conf, top3 = predict_frames_app(slc)
+        candidates.append({"key": key, "label": lbl, "conf": conf, "top3": top3})
+    return candidates
+
+def select_from_candidates_app(candidates, word_buffer):
+    """回傳 (final_label, conf_percent, method_str)"""
+    best = max(candidates, key=lambda c: c["conf"])
+    if best["conf"] >= LM_CONF_THRESHOLD:
+        return best["label"], round(best["conf"]*100), f"候選{best['key']}"
+    lbl = lm_selector.lm_select(candidates, word_buffer)
+    conf = next((c["conf"] for c in candidates if c["label"] == lbl), best["conf"])
+    return lbl, round(conf*100), "LM評分"
 
 # ────────────────────────────────────────────────────────────
 #  特徵提取（單幀，從 BGR numpy array）
@@ -245,7 +321,15 @@ def extract_feat(frame_bgr):
     ])
     ext_r=compute_finger_extensions(raw167[:63])    if right_hand else np.zeros(5,dtype=np.float32)
     ext_l=compute_finger_extensions(raw167[68:131]) if left_hand  else np.zeros(5,dtype=np.float32)
-    feat=np.concatenate([raw167,body_orient,ext_r,ext_l])
+    bin_r  =compute_finger_binary(raw167[:63])        if right_hand else np.zeros(5,dtype=np.float32)
+    bin_l  =compute_finger_binary(raw167[68:131])     if left_hand  else np.zeros(5,dtype=np.float32)
+    ptr_r  =compute_pointing_dir(raw167[:63])          if right_hand else np.zeros(3,dtype=np.float32)
+    ptr_l  =compute_pointing_dir(raw167[68:131])       if left_hand  else np.zeros(3,dtype=np.float32)
+    pinch_r=compute_pinch_dist(raw167[:63])            if right_hand else np.array([3.0],dtype=np.float32)
+    pinch_l=compute_pinch_dist(raw167[68:131])         if left_hand  else np.array([3.0],dtype=np.float32)
+    is_right=np.array([1.0 if right_hand else 0.0],dtype=np.float32)
+    is_left =np.array([1.0 if left_hand  else 0.0],dtype=np.float32)
+    feat=np.concatenate([raw167,body_orient,ext_r,ext_l,bin_r,bin_l,ptr_r,ptr_l,pinch_r,pinch_l,is_right,is_left])
     return apply_feature_weights(feat), True
 
 # ────────────────────────────────────────────────────────────
@@ -258,6 +342,7 @@ state = {
     "no_hand_count":    0,
     "stop_frames_cnt":  0,
     "prev_wrist":       None,
+    "prev_feat_delta":  None,   # ← 前一幀特徵，用於計算 delta
     "preview_top3":     [],
     "consistent_label": "",
     "consistent_count": 0,
@@ -300,10 +385,15 @@ def handle_frame(data):
     feat, hand_detected = extract_feat(frame)
 
     if hand_detected:
+        # Delta（速度）特徵：197 → 394 維
+        prev_fd = state["prev_feat_delta"]
+        delta = feat - prev_fd if prev_fd is not None else np.zeros_like(feat)
+        state["prev_feat_delta"] = feat.copy()
+        feat = np.concatenate([feat, delta])
+
         state["no_hand_count"] = 0
 
-        # 手腕速度
-        # 用 feat 中的 rel_wrist（dims 63-64 for right hand）
+        # 手腕速度（仍用原始 rel_wrist，索引不變）
         cur_wrist = feat[63:65].copy()  # right hand rel_wrist x,y
         if state["prev_wrist"] is not None:
             speed = float(np.linalg.norm(cur_wrist - state["prev_wrist"]))
@@ -339,49 +429,96 @@ def handle_frame(data):
                     state["consistent_count"]  = 1
 
                 if state["consistent_count"] >= CONSISTENCY_REQUIRED and top3[0][1] >= EARLY_TRIGGER_CONF*100:
+                    candidates = generate_candidates_app(state["sign_frames"])
+                    final_lbl, final_conf, method = select_from_candidates_app(candidates, state["word_buffer"])
                     emit("result", {
-                        "word": lbl, "conf": top3[0][1],
-                        "top3": top3, "trigger": "early",
+                        "word": final_lbl, "conf": final_conf,
+                        "top3": [(c["label"], round(c["conf"]*100)) for c in candidates],
+                        "trigger": f"early/{method}",
                         "words": state["word_buffer"],
                     })
-                    if lbl != state["last_pred"] and lbl != "_unknown_":
-                        state["word_buffer"].append(lbl)
-                        state["last_pred"] = lbl
+                    if final_lbl != state["last_pred"] and final_lbl != "_unknown_":
+                        state["word_buffer"].append(final_lbl)
+                        state["last_pred"] = final_lbl
                         emit("words", {"words": state["word_buffer"]})
                     reset_seg(); triggered = True
 
-            # 停止或滿幀觸發
+            # 結尾姿勢高信心提早觸發（靜止第3幀即檢查）
+            endpose_early = False
+            if (not triggered and
+                state["stop_frames_cnt"] == EARLY_ENDPOSE_MIN_STABLE and
+                len(state["sign_frames"]) >= MIN_FRAMES and
+                len(state["stable_buffer"]) >= EARLY_ENDPOSE_MIN_STABLE):
+                avg_chk = np.concatenate([np.mean(np.array(state["stable_buffer"]), axis=0), np.zeros(6, dtype=np.float32)])
+                end_conf_chk = probs_to_top3(get_probs([avg_chk] * SEQ_LEN))[0][1]
+                if end_conf_chk >= EARLY_ENDPOSE_CONF * 100:
+                    endpose_early = True
+
+            # 停止或滿幀觸發 → 多候選 + LLM 評分
             if not triggered and (
                 len(state["sign_frames"]) >= SEQ_LEN or
+                endpose_early or
                 (state["stop_frames_cnt"] >= STOP_FRAMES and len(state["sign_frames"]) >= MIN_FRAMES)
             ):
-                use_endpose = state["stop_frames_cnt"] >= STOP_FRAMES and len(state["stable_buffer"]) >= 3
+                use_endpose = (state["stop_frames_cnt"] >= STOP_FRAMES or endpose_early) and len(state["stable_buffer"]) >= 3
+                frames = state["sign_frames"]
+                n = len(frames)
 
                 if use_endpose:
-                    seq_probs = get_probs(state["sign_frames"])
-                    avg_feat  = np.mean(np.array(state["stable_buffer"]), axis=0)
-                    end_probs = get_probs([avg_feat] * SEQ_LEN)
-                    combined  = seq_probs * SEQ_W + end_probs * END_W
-                    top3      = probs_to_top3(combined)
-                    seq_top3  = probs_to_top3(seq_probs)
-                    end_top3  = probs_to_top3(end_probs)
-                    trigger   = "stop+endpose"
+                    avg_feat = np.concatenate([np.mean(np.array(state["stable_buffer"]), axis=0), np.zeros(6, dtype=np.float32)])
+                    def _endpose_predict(slc):
+                        sp = get_probs(slc)
+                        ep = get_probs([avg_feat] * SEQ_LEN)
+                        combined = sp * SEQ_W + ep * END_W
+                        buf_arr = np.array(state["stable_buffer"])
+                        # Gate 1: 雙手 gate — 左手幀比例<40% 排除穩定雙手詞彙
+                        left_rate = (buf_arr[:, 198] > W_BINARY * 0.5).mean()
+                        if left_rate < 0.4:
+                            BILATERAL_ONLY = {"對不起", "認真", "人", "聽人", "晚上"}
+                            p = combined.cpu().numpy().copy()
+                            for word in BILATERAL_ONLY:
+                                idx_arr = np.where(le.classes_ == word)[0]
+                                if len(idx_arr): p[idx_arr[0]] *= 0.02
+                            p /= (p.sum() + 1e-9)
+                            combined = torch.FloatTensor(p).to(combined.device)
+                        # Gate 2: 說 z方向 gate — 食指未明顯朝向鏡頭時壓制「說」
+                        point_z_w = float(buf_arr.mean(axis=0)[191])
+                        if point_z_w > -0.18 * W_POINTING:
+                            p = combined.cpu().numpy().copy()
+                            idx_arr = np.where(le.classes_ == "說")[0]
+                            if len(idx_arr): p[idx_arr[0]] *= 0.1
+                            p /= (p.sum() + 1e-9)
+                            combined = torch.FloatTensor(p).to(combined.device)
+                        top3 = probs_to_top3(combined)
+                        return top3[0][0], top3[0][1] / 100.0, top3
+                    candidates = []
+                    for key, slc in [
+                        ("A", frames),
+                        ("B", frames[:n - CANDIDATE_OFFSET] if n - CANDIDATE_OFFSET >= MIN_FRAMES else None),
+                        ("C", frames[CANDIDATE_OFFSET:]      if n - CANDIDATE_OFFSET >= MIN_FRAMES else None),
+                    ]:
+                        if slc is None: continue
+                        lbl, conf, top3 = _endpose_predict(slc)
+                        candidates.append({"key": key, "label": lbl, "conf": conf, "top3": top3})
+                    seq_top3 = probs_to_top3(get_probs(frames))
+                    end_top3 = probs_to_top3(get_probs([avg_feat] * SEQ_LEN))
+                    trigger  = "stop+endpose"
                 else:
-                    probs    = get_probs(state["sign_frames"])
-                    top3     = probs_to_top3(probs)
-                    seq_top3 = top3; end_top3 = []
-                    trigger  = "full"
+                    candidates = generate_candidates_app(frames)
+                    seq_top3   = candidates[0]["top3"]; end_top3 = []
+                    trigger    = "full"
 
-                lbl, conf = top3[0]
-                if conf >= CONF_THRESHOLD*100 and lbl != state["last_pred"] and lbl != "_unknown_":
-                    state["word_buffer"].append(lbl)
-                    state["last_pred"] = lbl
+                final_lbl, final_conf, method = select_from_candidates_app(candidates, state["word_buffer"])
+                if final_conf >= CONF_THRESHOLD*100 and final_lbl != state["last_pred"] and final_lbl != "_unknown_":
+                    state["word_buffer"].append(final_lbl)
+                    state["last_pred"] = final_lbl
                     emit("words", {"words": state["word_buffer"]})
 
                 emit("result", {
-                    "word": lbl, "conf": conf,
-                    "top3": top3, "seq_top3": seq_top3, "end_top3": end_top3,
-                    "trigger": trigger, "words": state["word_buffer"],
+                    "word": final_lbl, "conf": final_conf,
+                    "top3": [(c["label"], round(c["conf"]*100)) for c in candidates],
+                    "seq_top3": seq_top3, "end_top3": end_top3,
+                    "trigger": f"{trigger}/{method}", "words": state["word_buffer"],
                 })
                 reset_seg()
 
@@ -396,9 +533,10 @@ def handle_frame(data):
         })
 
     else:
-        state["no_hand_count"] += 1
-        state["prev_wrist"]    = None
-        state["stop_frames_cnt"] = 0
+        state["no_hand_count"]   += 1
+        state["prev_wrist"]       = None
+        state["prev_feat_delta"]  = None   # 手消失時重置 delta
+        state["stop_frames_cnt"]  = 0
         if state["seg_state"] == "COLLECTING" and state["no_hand_count"] > NO_HAND_TOLERANCE:
             reset_seg()
 

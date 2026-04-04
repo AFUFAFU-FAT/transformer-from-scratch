@@ -1,5 +1,5 @@
 """
-recognize.py
+recognize.py  ⚠️ 舊版辨識器（已由 recognize_endpose.py 取代，保留供參考）
 台灣手語即時辨識系統
 
 結構與 hand_detector.py 完全一致（避免 Windows 執行緒死鎖）：

@@ -20,26 +20,27 @@ SEQ_OUT_PATH   = "data/sequences.npz"
 LABEL_PATH     = "data/seq_label_encoder.pkl"
 
 CSV_FEAT_DIM = 167   # CSV 原始維度：149 + 雙臂特徵 12 + 手臉距離 6
-FEAT_DIM     = 179   # 訓練用維度：167 + 身體朝向 2 + 手指伸展分數 10（右手5 + 左手5）
+FEAT_DIM     = 199   # 167 + 身體朝向2 + 伸展分數10 + 伸展二值10 + 食指方向6 + 捏合距離2 + 手部偵測旗標2
 
-# ── 手指伸展分數索引 ──────────────────────────────────────────
-# 用「指尖到手腕距離 / 指節到手腕距離」量化每根手指的伸展程度
-#   伸直：分數 ≈ 2.0~3.0（指尖比指節離手腕遠）
-#   彎曲：分數 ≈ 1.0~1.2（指尖和指節距手腕相近）
-#   握拳：分數 ≈ 1.0（所有手指分數接近）
+# ── 手指關節索引 ──────────────────────────────────────────────
 TIP_IDX = [4,  8, 12, 16, 20]   # 拇指到小指指尖
 MCP_IDX = [1,  5,  9, 13, 17]   # 拇指到小指指節（MCP）
+# 關節角度判斷：量測 PIP 關節的彎曲角度（>130° = 伸直，否則彎曲）
+FINGER_JOINTS = [(2,3,4), (5,6,7), (9,10,11), (13,14,15), (17,18,19)]
+EXTEND_ANGLE  = 140.0
 
 # ── 特徵權重 ──────────────────────────────────────────────────
 # 優先順序：手形 > 掌向 > 位置（台灣手語 5 大要素，手形最關鍵）
 # W_HANDSHAPE 最高：明確編碼哪根手指伸出，直接區分「甚麼」(食指)vs開掌
-W_HANDSHAPE = 6.0   # 手指伸展分數（新增，最高優先）→ 手形
+W_HANDSHAPE = 6.0   # 手指伸展分數（連續）→ 手形
+W_BINARY    = 10.0  # 手指伸展二值（哪隻伸出）→ 手語最核心判斷基準
+W_POINTING  = 8.0   # 食指指向方向（你/我/說/他/我們 都是[0,1,0,0,0]，靠方向區分）
 W_FINGERTIP = 4.0   # 指尖座標（相對手腕正規化）→ 手形輔助
 W_FINGER    = 3.0   # 其他手部關節 → 手形
 W_PALM_DIR  = 3.0   # 掌心方向（orientation）
-W_POSITION  = 2.5   # 手腕相對身體位置（rel_wrist，高度直接區分爸爸/哥哥等混淆對）
+W_POSITION  = 4.0   # 手腕相對身體位置（rel_wrist，高度直接區分爸爸/哥哥等混淆對）
 W_ARM       = 2.5   # 手臂特徵（手肘位置 + 上臂/前臂方向）→ 手臂動作
-W_FACE      = 3.0   # 手臉距離（手腕到鼻子/嘴/耳朵）→ 區分貼臉vs非貼臉手勢
+W_FACE      = 5.0   # 手臉距離（手腕到鼻子/嘴/耳朵）→ 區分貼臉vs非貼臉手勢
 W_ORIENT    = 2.0   # 身體朝向（肩膀向量的 cos/sin）→ 讓座標相對身體面向不變
 W_ANCHOR    = 1.5   # 身體錨點 → 位置（稍降，手形優先）
 
@@ -56,13 +57,58 @@ def compute_finger_extensions(lm63_batch):
     lm63_batch: shape (N, 63) — 21 landmarks × 3 (x,y,z)
     返回: shape (N, 5) — 每指 tip-to-wrist / mcp-to-wrist 比值
     """
-    lms    = lm63_batch.reshape(-1, 21, 3)    # (N, 21, 3)
-    wrist  = lms[:, 0:1, :]                   # (N, 1, 3)
-    tips   = lms[:, TIP_IDX, :]               # (N, 5, 3)
-    mcps   = lms[:, MCP_IDX, :]               # (N, 5, 3)
-    tip_d  = np.linalg.norm(tips - wrist, axis=2)   # (N, 5)
+    lms    = lm63_batch.reshape(-1, 21, 3)
+    wrist  = lms[:, 0:1, :]
+    tips   = lms[:, TIP_IDX, :]
+    mcps   = lms[:, MCP_IDX, :]
+    tip_d  = np.linalg.norm(tips - wrist, axis=2)
     mcp_d  = np.linalg.norm(mcps - wrist, axis=2) + 1e-6
     return (tip_d / mcp_d).astype(np.float32)
+
+
+def compute_finger_binary(lm63_batch):
+    """
+    從 63 維手部關鍵點批次計算 5 指伸展二值（純角度判斷，無遮蔽估計）。
+    量測 PIP/IP 關節角度：> 130° → 伸出(1)，否則彎曲(0)
+    例：認真=[1,1,1,1,1]，找(OK)=[0,0,1,1,1]，握拳=[0,0,0,0,0]
+    """
+    lms    = lm63_batch.reshape(-1, 21, 3)
+    binary = np.zeros((len(lms), 5), dtype=np.float32)
+    for fi, (a, b, c) in enumerate(FINGER_JOINTS):
+        v1    = lms[:, a, :] - lms[:, b, :]
+        v2    = lms[:, c, :] - lms[:, b, :]
+        cos_a = np.sum(v1*v2, axis=1) / (
+                    np.linalg.norm(v1, axis=1) * np.linalg.norm(v2, axis=1) + 1e-6)
+        binary[:, fi] = (np.degrees(np.arccos(np.clip(cos_a, -1.0, 1.0))) > EXTEND_ANGLE)
+    return binary.astype(np.float32)
+
+
+def compute_pinch_dist(lm63_batch):
+    """
+    捏合距離：||拇指尖 - 食指尖|| / 掌長（正規化）
+    找(OK)：拇指食指碰觸 → 小值(≈0)
+    再見/認真：五指展開 → 大值(≈1.5~2.5)
+    lm63_batch: (N, 63)  →  (N, 1)
+    """
+    lms       = lm63_batch.reshape(-1, 21, 3)
+    thumb_tip = lms[:, 4, :]
+    index_tip = lms[:, 8, :]
+    hand_size = np.linalg.norm(lms[:, 9, :] - lms[:, 0, :], axis=1) + 1e-6  # 掌長
+    dist      = np.linalg.norm(thumb_tip - index_tip, axis=1) / hand_size
+    return np.minimum(dist, 3.0).reshape(-1, 1).astype(np.float32)
+
+
+def compute_pointing_dir(lm63_batch):
+    """
+    食指指向方向（3D 正規化向量）：normalize(tip - MCP)
+    用於區分同樣是 binary=[0,1,0,0,0] 的手勢：
+      你（向前）、我（向自己）、說（從嘴向前）、他（向右）、我們（繞圈）
+    lm63_batch: (N, 63)  →  (N, 3)
+    """
+    lms = lm63_batch.reshape(-1, 21, 3)
+    direction = lms[:, 8, :] - lms[:, 5, :]   # index tip - index MCP
+    norms = np.linalg.norm(direction, axis=1, keepdims=True) + 1e-6
+    return (direction / norms).astype(np.float32)
 
 
 def apply_feature_weights(frames):
@@ -114,6 +160,18 @@ def apply_feature_weights(frames):
 
     # 手指伸展分數 169..178（右手5 + 左手5）
     out[:, 169:179] = frames[:, 169:179] * W_HANDSHAPE
+
+    # 手指伸展二值 179..188（右手5 + 左手5）— 1=伸出, 0=彎曲
+    out[:, 179:189] = frames[:, 179:189] * W_BINARY
+
+    # 食指指向方向 189..194（右手 dx/dy/dz + 左手 dx/dy/dz）
+    out[:, 189:195] = frames[:, 189:195] * W_POINTING
+
+    # 捏合距離 195..196（右手, 左手）— 找(OK)≈0, 再見/認真≈1.5~2.5
+    out[:, 195:197] = frames[:, 195:197] * W_BINARY   # 同樣高權重
+
+    # 手部偵測旗標 197..198（is_right, is_left）— 單手 vs 雙手詞彙最直接判斷
+    out[:, 197:199] = frames[:, 197:199] * W_BINARY
 
     return out
 
@@ -232,7 +290,31 @@ def process_features(raw):
 
     ext_r  = compute_finger_extensions(raw[:, :63])
     ext_l  = compute_finger_extensions(raw[:, 68:131])
-    frames = np.concatenate([raw, body_orient, ext_r, ext_l], axis=1)
+    bin_r   = compute_finger_binary(raw[:, :63])
+    bin_l   = compute_finger_binary(raw[:, 68:131])
+    ptr_r   = compute_pointing_dir(raw[:, :63])
+    ptr_l   = compute_pointing_dir(raw[:, 68:131])
+
+    # ── 時序平滑（window=3），去除 MediaPipe 跳幀噪音 ──
+    if len(bin_r) >= 3:
+        kernel = np.array([1/3, 1/3, 1/3])
+        for i in range(5):
+            bin_r[:, i] = np.convolve(bin_r[:, i], kernel, mode='same')
+            bin_l[:, i] = np.convolve(bin_l[:, i], kernel, mode='same')
+        for i in range(3):
+            ptr_r[:, i] = np.convolve(ptr_r[:, i], kernel, mode='same')
+            ptr_l[:, i] = np.convolve(ptr_l[:, i], kernel, mode='same')
+        norms_r = np.linalg.norm(ptr_r, axis=1, keepdims=True)
+        norms_l = np.linalg.norm(ptr_l, axis=1, keepdims=True)
+        ptr_r = ptr_r / (norms_r + 1e-6)
+        ptr_l = ptr_l / (norms_l + 1e-6)
+    pinch_r = compute_pinch_dist(raw[:, :63])        # (N,1) 右手捏合距離
+    pinch_l = compute_pinch_dist(raw[:, 68:131])     # (N,1) 左手捏合距離
+    # 手部偵測旗標：右手/左手有無被偵測到（座標全零 = 未偵測）
+    is_right = (np.abs(raw[:, :63]).sum(axis=1) > 1e-3).astype(np.float32).reshape(-1, 1)
+    is_left  = (np.abs(raw[:, 68:131]).sum(axis=1) > 1e-3).astype(np.float32).reshape(-1, 1)
+    frames  = np.concatenate(
+        [raw, body_orient, ext_r, ext_l, bin_r, bin_l, ptr_r, ptr_l, pinch_r, pinch_l, is_right, is_left], axis=1)
     return apply_feature_weights(frames)
 
 # ── 訓練集：從 recorded_features.csv ──────────────────────────

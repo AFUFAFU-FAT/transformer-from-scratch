@@ -80,6 +80,37 @@ print(f"   類別數：{num_classes}")
 print(f"   測試集涵蓋類別：{len(np.unique(y_test))}/{num_classes}")
 
 # ────────────────────────────────────────────────────────────
+#  Delta 特徵（速度）：feat[t] - feat[t-1]，第0幀補零
+#  靜止動作（「我」）delta ≈ 0，動態動作 delta 有明顯非零值
+#  input_dim: 179 → 358，無需重新錄影
+# ────────────────────────────────────────────────────────────
+def add_delta(X):
+    """X: (N, T, D) → (N, T, 2D)，追加幀差分特徵"""
+    delta = np.zeros_like(X)
+    delta[:, 1:, :] = X[:, 1:, :] - X[:, :-1, :]
+    return np.concatenate([X, delta], axis=2)
+
+def add_cumulative(X):
+    """
+    X: (N, T, D) → (N, T, D+6)，追加累積位移特徵
+    右手腕 dims 63:66，左手腕 dims 131:134
+    cum[t] = pos[t] - pos[0]，捕捉動作方向：
+      問（往前）→ cum_z 正值   是（往身體）→ cum_z 負值   靜止 → ≈0
+    """
+    right_start = X[:, 0:1, 63:66]    # (N, 1, 3)
+    left_start  = X[:, 0:1, 131:134]  # (N, 1, 3)
+    cum_r = X[:, :, 63:66]   - right_start  # (N, T, 3)
+    cum_l = X[:, :, 131:134] - left_start   # (N, T, 3)
+    return np.concatenate([X, cum_r, cum_l], axis=2)
+
+X_train_raw = add_delta(X_train_raw)
+X_test_raw  = add_delta(X_test_raw)
+X_train_raw = add_cumulative(X_train_raw)
+X_test_raw  = add_cumulative(X_test_raw)
+input_dim   = X_train_raw.shape[2]   # 199*2 + 6 = 404
+print(f"   [Delta+Cumulative] input_dim = {input_dim}")
+
+# ────────────────────────────────────────────────────────────
 #  特徵正規化（僅用訓練集計算 mean/std，避免洩漏）
 # ────────────────────────────────────────────────────────────
 X_flat    = X_train_raw.reshape(-1, input_dim)

@@ -135,6 +135,19 @@ HAND_CONNECTIONS = [
     (5,9),(9,13),(13,17)
 ]
 
+EXTEND_ANGLE  = 150.0
+FINGER_JOINTS = [(2,3,4),(5,6,7),(9,10,11),(13,14,15),(17,18,19)]
+
+def compute_finger_binary_display(hand_landmarks):
+    """回傳 5-dim binary（拇食中無小），供錄製畫面即時顯示用"""
+    lms = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks], dtype=np.float32)
+    binary = []
+    for a, b, c in FINGER_JOINTS:
+        v1 = lms[a] - lms[b]; v2 = lms[c] - lms[b]
+        cos_a = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6)
+        binary.append(np.degrees(np.arccos(np.clip(cos_a, -1.0, 1.0))) > EXTEND_ANGLE)
+    return binary
+
 # Pose landmark 索引
 NOSE         = 0
 MOUTH_L      = 9   # 嘴角左
@@ -539,6 +552,25 @@ def main():
         hand_color = (0, 255, 0) if hand_ok else (0, 60, 255)
         hand_text  = f"手部偵測 ✓ ({n_hands} 手)" if hand_ok else "請將手放入畫面"
         frame = put_chinese(frame, hand_text, (20, 90), size=20, color=hand_color)
+
+        # ── 即時 binary 顯示（手指伸出偵測，偵測錯誤時按 R 重錄）──
+        if hand_res and hand_res.hand_landmarks:
+            right_lm = left_lm = None
+            for i, cls in enumerate(hand_res.handedness):
+                if cls[0].category_name == "Left":
+                    right_lm = hand_res.hand_landmarks[i]
+                else:
+                    left_lm  = hand_res.hand_landmarks[i]
+            labels = "拇食中無小"
+            def _fmt(b): return labels[i] if b else "✗"
+            if right_lm:
+                br = compute_finger_binary_display(right_lm)
+                r_str = "右:" + "".join(labels[i] if br[i] else "✗" for i in range(5))
+                frame = put_chinese(frame, r_str, (20, 140), size=18, color=(150, 255, 150))
+            if left_lm:
+                bl = compute_finger_binary_display(left_lm)
+                l_str = "左:" + "".join(labels[i] if bl[i] else "✗" for i in range(5))
+                frame = put_chinese(frame, l_str, (20, 163), size=18, color=(150, 200, 255))
 
         # Pose 狀態
         pose_ok    = bool(pose_res.pose_landmarks) if pose_res else False
