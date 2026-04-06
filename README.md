@@ -11,6 +11,8 @@ pinned: false
 
 即時辨識台灣手語詞彙，透過瀏覽器攝影機擷取畫面，以 MediaPipe 提取手部與身體特徵，送入 BiLSTM 模型分類，結果即時顯示於網頁。
 
+[點我前往 台灣手語辨識網頁](https://huggingface.co/spaces/AFUFAFU/TWSL_AI_Project)
+
 > 自主學習計畫作品：從閱讀 *Attention Is All You Need* 論文、手推 Transformer 公式，到將 Attention 機制應用於手語序列辨識模型，實作完整的「資料收集 → 特徵工程 → 模型訓練 → 即時部署」AI 開發流程。
 
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-black?logo=anthropic)](https://claude.ai/code)
